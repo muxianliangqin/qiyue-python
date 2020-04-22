@@ -161,6 +161,7 @@ def download_file(url, path, min_size, try_time=0):
         # 如果是图片，并且大小小于min_size，则不下载
         if re.match('.*\.(jpg|jpeg|gif|png|bmp)', str.lower(url)) and http_size < min_size:
             too_small_flag = True
+            download_flag = True
         else:
             with open(path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=1024):

@@ -18,8 +18,8 @@ class Config(object):
         'host': '0.0.0.0',
         'port': 7130
     }
-    # 当前环境
-    ENV = 'dev'
+    # 是否开启定时任务
+    SCHEDULE = False
     # 附件保存目录
     ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
 
@@ -43,7 +43,7 @@ class ProductionConfig(Config):
         'port': 7030
     }
 
-    ENV = 'prod'
+    SCHEDULE = True
     # 附件保存目录
     ATTACHMENT_DIR = '/home/git/file/attachment/crawler'
 
@@ -62,7 +62,7 @@ class DevelopmentConfig(Config):
         'port': 7130
     }
 
-    ENV = 'dev'
+    SCHEDULE = False
     # 附件保存目录
     ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
 

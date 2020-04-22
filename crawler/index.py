@@ -87,7 +87,7 @@ class Crawler():
         title_results = {}
         for category in categories:
             category_id, url, xpath, charset = category
-            print('\n时间：{}，新闻分类：{}'.format(base_util.cur_time(), url))
+            print('\n时间：{}，新闻分类：{}, xpath'.format(base_util.cur_time(), url, xpath))
             title_result = {
                 'category_id': category_id,
                 'url': url,
@@ -131,7 +131,7 @@ class Crawler():
 
     def get_news(self, category_id=None, limit=100):
         news_sql = '''
-            select n.id, n.url, n.category_id, c.xpath_text, c.charset 
+            select n.id, n.url, n.category_id, c.xpath_text, c.charset, n.text_state, n.attachment_state
             from news n 
             join category c on n.category_id = c.id 
             where (%s is null and (n.news_state = 0 and (n.text_state = '0' or n.attachment_state = '0')))
@@ -156,46 +156,18 @@ class Crawler():
 
     def text_func(self, new, html):
         text_sql = '''
-        replace into texts (news_id, text, keyword_result) values (%s, %s, %s)
+        replace into texts (news_id, text) values (%s, %s)
         '''
         news_update_text_sql = '''
         update news set text_state = '1' where id = %s
         '''
-        keyword_sql = '''
-            select k.reg_exp 
-            from keyword k 
-            join web_keyword wk on wk.keyword_id = k.id 
-            where wk.category_id = %s
-        '''
-        news_id, url, category_id, xpath, charset = new[0], new[1], new[2], new[3], new[4]
+        news_id, url, category_id, xpath, charset, text_state, attachment_state = new
         text = None
         text_error = None
         try:
             text = html.text.strip()
-            # print('text:{}'.format(text))
-            # 关键字暂时不获取，拟改为标签设置
-            # c_ks = dict()
-            # if category_id not in c_ks:
-            #     cursor.execute(keyword_sql, category_id)
-            #     keywords = cursor.fetchall()
-            #     c_ks[category_id] = [k[0] for k in keywords]
-            # 保存新闻正文
-            # regexps = c_ks[category_id]
-            # results = []
-            # for regexp in regexps:
-            #     regexp = regexp[1:]
-            #     idx = regexp.rfind('/')
-            #     # modifier = regexp[idx+1:]
-            #     # '/\d+(\.\d+)?[亿|万](美)?元/g'  '\\d+(\\.\\d+)?[亿|万](美)?元'
-            #     regexp = regexp[:idx]
-            #     res = re.findall('({})'.format(regexp), text)
-            #     res = [i[0] for i in res]
-            #     results.extend(res)
-            # print('results:{}'.format(results))
-            # keyword_result = ','.join(results)
-            keyword_result = ''
             # 保存正文内容
-            self.cursor.execute(text_sql, (news_id, text, keyword_result))
+            self.cursor.execute(text_sql, (news_id, text))
             # 改变正文已抓取状态
             self.cursor.execute(news_update_text_sql, news_id)
             self.conn.commit()
@@ -213,7 +185,7 @@ class Crawler():
         attachments_sql = '''
         insert into attachments (news_id, path, name, format) values (%s, %s, %s, %s)
         '''
-        news_id, url, category_id, xpath, charset = new[0], new[1], new[2], new[3], new[4]
+        news_id, url, category_id, xpath, charset, text_state, attachment_state = new
         attachment_results = []
         attachments_error = None
         try:
@@ -246,20 +218,22 @@ class Crawler():
                     'download_flag': None,
                     'too_small_flag': None,
                 }
-                attachment_dir = config.ATTACHMENT_DIR
+                source_dir = config.ATTACHMENT_DIR
                 # 确定保存附件的文件夹
                 file_dir = time.strftime('%Y/%m/%d')
-                attachment_dir = os.path.join(attachment_dir, file_dir)
+                attachment_dir = os.path.join(source_dir, file_dir)
                 if not os.path.exists(attachment_dir):
                     os.makedirs(attachment_dir)
-                attachment_name = time.strftime('%H%M%S') + '_' + base_util.random_str()
-                attachment_path = attachment_dir + os.path.sep + attachment_name + '.' + file_format
+                attachment_name = time.strftime('%H%M%S') + '_' + base_util.random_str() + '.' + file_format
+                file_path = os.path.join(file_dir, attachment_name)
+                attachment_path = os.path.join(source_dir, file_path)
                 attachment_path = base_util.url_linux(attachment_path)
                 # 50k以下的图片，不下载
                 download_flag, too_small_flag = base_util.download_file(file_url, attachment_path, 50 * 1024)
                 if download_flag:
                     attachment_state = '1'
-                    self.cursor.execute(attachments_sql, (news_id, attachment_path, file_name, file_format))
+                    if not too_small_flag:
+                        self.cursor.execute(attachments_sql, (news_id, base_util.url_linux(file_path), file_name, file_format))
                 attachment_result['download_flag'] = download_flag
                 attachment_result['too_small_flag'] = too_small_flag
                 attachment_results.append(attachment_result)
@@ -276,8 +250,8 @@ class Crawler():
     def crawl_text(self, news):
         text_results = {}
         for new in news:
-            news_id, url, category_id, xpath, charset = new[0], new[1], new[2], new[3], new[4]
-            print('抓取正文和附件，url:{}, xpath:{}, category_id:{}, charset:{}'.format(url, xpath, category_id, charset))
+            news_id, url, category_id, xpath, charset, text_state, attachment_state = new
+            print('抓取正文和附件，url:{}, xpath:{}'.format(url, xpath))
             text_result = {
                 'news_id': news_id,
                 'url': url,
@@ -291,15 +265,25 @@ class Crawler():
             }
             self.browser.get(url)
             html = self.browser.find_element_by_xpath(xpath)
-            text_thread = ResultThread(self.text_func, (new, html))
-            attachment_thread = ResultThread(self.attachment_func, (new, html))
-            text_thread.start()
-            attachment_thread.start()
-            # 等待子线程结束后，再往后面执行
-            text_thread.join()
-            attachment_thread.join()
-            text_result['text'], text_result['text_error'] = text_thread.get_result()
-            text_result['attachments'], text_result['attachments_error'] = attachment_thread.get_result()
+            if text_state == '0':
+                text_thread = ResultThread(self.text_func, (new, html))
+                text_thread.start()
+                # 等待子线程结束后，再往后面执行
+                text_thread.join()
+                text_result['text'], text_result['text_error'] = text_thread.get_result()
+                if text_result['text_error'] is not None:
+                    print('抓取正文结果，state: {}'.format(text_result['text_error']))
+                else:
+                    print('抓取正文结果，state: {}'.format('成功'))
+            if attachment_state == '0':
+                attachment_thread = ResultThread(self.attachment_func, (new, html))
+                attachment_thread.start()
+                attachment_thread.join()
+                text_result['attachments'], text_result['attachments_error'] = attachment_thread.get_result()
+                if text_result['attachments_error'] is not None:
+                    print('抓取附件结果, state: {}'.format(text_result['attachments_error']))
+                else:
+                    print('抓取附件结果，state: {}'.format('成功'))
             text_results[url] = text_result
         return text_results
 
@@ -307,10 +291,13 @@ class Crawler():
         try:
             # 初始化conn、cursor和browser
             self.init()
+            # 抓取标题和正文附件没有关联关系，所有使用多线程加快速度
             # 爬取标题数据
-            self.crawl_title(self.get_categories())
+            ResultThread(self.crawl_title, (self.get_categories(),)).start()
+            # self.crawl_title(self.get_categories())
             # 爬取正文数据
-            self.crawl_text(self.get_news())
+            ResultThread(self.crawl_text, (self.get_news(),)).start()
+            # self.crawl_text(self.get_news())
             print('批次结束')
         except Warning as w:
             print('warning: {}'.format(w))
@@ -388,7 +375,7 @@ class CrawlThread (threading.Thread):
         self.crawler = crawler
 
     def run(self):
-        if config.ENV == 'prod':
+        if config.SCHEDULE:
             self.crawler.crawler()
             schedule.every(30).minutes.do(self.crawler.crawler)
             while True:
@@ -398,9 +385,9 @@ class CrawlThread (threading.Thread):
 crawler_instance = Crawler()
 CrawlThread(crawler_instance).start()
 
-# 测试网站爬取的参数是否设置正确
 app = Flask(__name__)
 
+# 测试网站爬取的参数是否设置正确
 @app.route("/crawler/test", methods=['POST'])
 def test():
     request_id = request.form['id']
