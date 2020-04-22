@@ -21,7 +21,7 @@ class Config(object):
     # 当前环境
     ENV = 'dev'
     # 附件保存目录
-    ATTACHMENT_DIR = 'D:\python\workspace'
+    ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
 
     # get attribute
     def __getitem__(self, key):
@@ -45,7 +45,7 @@ class ProductionConfig(Config):
 
     ENV = 'prod'
     # 附件保存目录
-    ATTACHMENT_DIR = '/home/python'
+    ATTACHMENT_DIR = '/home/git/file/attachment/crawler'
 
 class DevelopmentConfig(Config):
     MYSQL = {
@@ -64,7 +64,7 @@ class DevelopmentConfig(Config):
 
     ENV = 'dev'
     # 附件保存目录
-    ATTACHMENT_DIR = 'D:\python\workspace'
+    ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
 
 
 mapping = {
