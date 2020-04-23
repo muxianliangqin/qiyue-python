@@ -400,6 +400,12 @@ def test():
     # 返回json数据
     return jsonify(result)
 
+# 手动触发爬取程序
+@app.route("/crawler/crawler", methods=['GET'])
+def crawler():
+    crawler_instance.crawler()
+    return 'ok'
+
 app.run(host=config.FLASK['host'], port=config.FLASK['port'])
 
 
