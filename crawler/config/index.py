@@ -22,6 +22,10 @@ class Config(object):
     SCHEDULE = False
     # 附件保存目录
     ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
+    # chromeDriver 启动的参数设置
+    CHROME = {
+        'port': 7131
+    }
 
     # get attribute
     def __getitem__(self, key):
@@ -46,6 +50,10 @@ class ProductionConfig(Config):
     SCHEDULE = True
     # 附件保存目录
     ATTACHMENT_DIR = '/home/git/file/attachment/crawler'
+    # chromeDriver 启动的参数设置
+    CHROME = {
+        'port': 7031
+    }
 
 class DevelopmentConfig(Config):
     MYSQL = {
@@ -65,7 +73,10 @@ class DevelopmentConfig(Config):
     SCHEDULE = False
     # 附件保存目录
     ATTACHMENT_DIR = 'D:\\application\\workspace\\python\\crawler'
-
+    # chromeDriver 启动的参数设置
+    CHROME = {
+        'port': 7131
+    }
 
 mapping = {
     'dev': DevelopmentConfig,

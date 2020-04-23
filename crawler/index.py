@@ -47,6 +47,8 @@ class Crawler():
             chrome_options.add_argument('--disable-dev-shm-usage')
             chrome_options.add_argument('blink-settings=imagesEnabled=false')
             chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--disable-plugins')
+            chrome_options.add_argument('--disable-images')
             # chrome_options.add_experimental_option("prefs", {
             #     "download.default_directory": r"D:\\workspace",
             #     "download.prompt_for_download": False,
@@ -57,7 +59,7 @@ class Crawler():
                 'profile.default_content_settings.popups': 0,
                 'download.default_directory': 'D:\\workspace'
             })
-            self.browser = webdriver.Chrome(options=chrome_options)
+            self.browser = webdriver.Chrome(port= config.CHROME['port'], options=chrome_options)
 
 
     # 申明 browser和conn变量
@@ -145,7 +147,7 @@ class Crawler():
 
     def get_news_by_url(self, url):
         news_sql = '''
-            select n.id, n.url, n.category_id, c.xpath_text, c.charset 
+            select n.id, n.url, n.category_id, c.xpath_text, c.charset, n.text_state, n.attachment_state
             from news n 
             join category c on c.id = n.category_id
             where n.url = %s
@@ -237,6 +239,9 @@ class Crawler():
                 attachment_result['download_flag'] = download_flag
                 attachment_result['too_small_flag'] = too_small_flag
                 attachment_results.append(attachment_result)
+            # 如果没有附件下载，也变为已完成
+            if len(attachments) == 0:
+                attachment_state = '1'
             # 修改附件下载状态
             self.cursor.execute(news_update_attachment_sql, (attachment_state, news_id))
             # 每条新闻的正文、附件等数据保存合并提交
@@ -305,7 +310,7 @@ class Crawler():
             print('error: {}'.format(traceback.print_exc()))
         # finally:
         # ResultThread(close_conn).start()
-        # ResultThread(close_browser).start()
+        #     self.close_browser()
 
     def test(self, request_id):
         result = {
@@ -341,8 +346,8 @@ class Crawler():
             result['errorCode'] = '9999'
             result['errorMsg'] = repr(e)
         # finally:
-            # ResultThread(close_conn).start()
-            # ResultThread(close_browser).start()
+        #     self.close_conn()
+        #     self.close_browser()
         return result
 
     def close_conn(self):
