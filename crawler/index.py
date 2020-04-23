@@ -38,28 +38,33 @@ class Crawler():
         finally:
             self.cursor = self.conn.cursor()
 
+    @staticmethod
+    def get_web_driver():
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('blink-settings=imagesEnabled=false')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--disable-plugins')
+        chrome_options.add_argument('--disable-images')
+        # chrome_options.add_experimental_option("prefs", {
+        #     "download.default_directory": r"D:\\workspace",
+        #     "download.prompt_for_download": False,
+        #     "download.directory_upgrade": True,
+        #     "safebrowsing.enabled": True
+        # })
+        chrome_options.add_experimental_option("prefs", {
+            'profile.default_content_settings.popups': 0,
+            'download.default_directory': 'D:\\workspace'
+        })
+        return webdriver.Chrome(port=config.CHROME['port'], options=chrome_options)
 
     def get_browser(self):
         if self.browser is None:
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('blink-settings=imagesEnabled=false')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--disable-plugins')
-            chrome_options.add_argument('--disable-images')
-            # chrome_options.add_experimental_option("prefs", {
-            #     "download.default_directory": r"D:\\workspace",
-            #     "download.prompt_for_download": False,
-            #     "download.directory_upgrade": True,
-            #     "safebrowsing.enabled": True
-            # })
-            chrome_options.add_experimental_option("prefs", {
-                'profile.default_content_settings.popups': 0,
-                'download.default_directory': 'D:\\workspace'
-            })
-            self.browser = webdriver.Chrome(port= config.CHROME['port'], options=chrome_options)
+            self.browser = Crawler.get_web_driver()
+        elif len(self.browser.window_handles) == 0:
+            self.browser = Crawler.get_web_driver()
 
 
     # 申明 browser和conn变量
@@ -99,6 +104,7 @@ class Crawler():
                 'error': None
             }
             try:
+                print('chrome打开的浏览器：{}'.format(self.browser.window_handles))
                 self.browser.get(url)
                 xpath_res = self.browser.find_element_by_xpath(xpath)
                 news = xpath_res.find_elements_by_tag_name('a')
