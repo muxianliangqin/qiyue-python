@@ -3,6 +3,11 @@ import schedule, time, os, sys, traceback, re, threading
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from flask import Flask, request, jsonify
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.common.exceptions import TimeoutException
 
 # crawler的父目录加入系统搜索目录，以使得在linux系统中可以import自定义的模块
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -33,8 +38,8 @@ class Crawler():
             self.conn.ping(reconnect=True)
         except Exception as e:
             self.conn = pymysql.connect(host=config.MYSQL['host'], port=config.MYSQL['port'],
-                                   user=config.MYSQL['user'], passwd=config.MYSQL['password'],
-                                   db=config.MYSQL['db'], charset=config.MYSQL['charset'])
+                                        user=config.MYSQL['user'], passwd=config.MYSQL['password'],
+                                        db=config.MYSQL['db'], charset=config.MYSQL['charset'])
         finally:
             self.cursor = self.conn.cursor()
 
@@ -63,7 +68,16 @@ class Crawler():
     def get_browser(self):
         if self.browser is None:
             self.browser = Crawler.get_web_driver()
-        elif len(self.browser.window_handles) == 0:
+
+        # 浏览器对象不可用，重新创建
+        handles = None
+        try:
+            handles = self.browser.window_handles
+        except WebDriverException as e:
+            print('重新创建browser，error:{}'.format(e))
+            self.browser = Crawler.get_web_driver()
+
+        if len(handles) == 0:
             self.browser = Crawler.get_web_driver()
 
 
@@ -106,6 +120,10 @@ class Crawler():
             try:
                 print('chrome打开的浏览器：{}'.format(self.browser.window_handles))
                 self.browser.get(url)
+                # 显性等待，等待xpath的元素出现程序才往下运行
+                WebDriverWait(self.browser, 5, 0.5).until(
+                    ec.presence_of_element_located((By.XPATH, xpath))
+                )
                 xpath_res = self.browser.find_element_by_xpath(xpath)
                 news = xpath_res.find_elements_by_tag_name('a')
                 invalid_title = r'^(首页|下一页|上一页|确定|末页|尾页|更多(>>)?|\d+)$'
@@ -130,6 +148,8 @@ class Crawler():
                     self.cursor.executemany(new_insert_sql, sql_input)
                     self.conn.commit()
                 title_result['news'] = news_results
+            except TimeoutException as e:
+                title_result['error'] = 'xpath填写错误，元素未找到'
             except Exception as e:
                 print('爬取标题:{}出错，error: {}'.format(url, traceback.print_exc()))
                 title_result['error'] = repr(e)
@@ -275,6 +295,10 @@ class Crawler():
                 'attachments_error': None
             }
             self.browser.get(url)
+            # 显性等待，等待xpath的元素出现程序才往下运行
+            WebDriverWait(self.browser, 5, 0.5).until(
+                ec.presence_of_element_located((By.XPATH, xpath))
+            )
             html = self.browser.find_element_by_xpath(xpath)
             if text_state == '0':
                 text_thread = ResultThread(self.text_func, (new, html))
