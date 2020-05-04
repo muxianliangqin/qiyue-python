@@ -18,7 +18,8 @@ from crawler.config.index import config
 class Crawler():
     _instance_lock = threading.Lock()
 
-    browser = None
+    title_browser = None
+    text_browser = None
     conn = None
     cursor = None
 
@@ -65,25 +66,24 @@ class Crawler():
         })
         return webdriver.Chrome(port=config.CHROME['port'], options=chrome_options)
 
-    def get_browser(self):
-        if self.browser is None:
-            self.browser = Crawler.get_web_driver()
+    @staticmethod
+    def get_browser(browser=None):
+        if browser is None:
+            browser = Crawler.get_web_driver()
 
         # 浏览器对象不可用，重新创建
-        handles = None
         try:
-            handles = self.browser.window_handles
+            handle = browser.current_window_handle
         except WebDriverException as e:
             print('重新创建browser，error:{}'.format(e))
-            self.browser = Crawler.get_web_driver()
-
-        if len(handles) == 0:
-            self.browser = Crawler.get_web_driver()
+            browser = Crawler.get_web_driver()
+        return browser
 
 
     # 申明 browser和conn变量
     def init(self):
-        self.get_browser()
+        self.title_browser = Crawler.get_browser(self.title_browser)
+        self.text_browser = Crawler.get_browser(self.text_browser)
         self.get_conn()
 
     def get_categories(self, category_id=None, limit=100):
@@ -96,7 +96,6 @@ class Crawler():
         '''
         self.cursor.execute(category_sql, (category_id, category_id, category_id, limit))
         categories = self.cursor.fetchall()
-        t4 = time.time()
         return categories
 
     def crawl_title(self, categories):
@@ -108,7 +107,7 @@ class Crawler():
         title_results = {}
         for category in categories:
             category_id, url, xpath, charset = category
-            print('\n时间：{}，新闻分类：{}, xpath'.format(base_util.cur_time(), url, xpath))
+            print('\n时间：{}，新闻分类：{}, xpath:{}'.format(base_util.cur_time(), url, xpath))
             title_result = {
                 'category_id': category_id,
                 'url': url,
@@ -118,13 +117,11 @@ class Crawler():
                 'error': None
             }
             try:
-                print('chrome打开的浏览器：{}'.format(self.browser.window_handles))
-                self.browser.get(url)
+                self.title_browser.get(url)
                 # 显性等待，等待xpath的元素出现程序才往下运行
-                WebDriverWait(self.browser, 5, 0.5).until(
+                xpath_res = WebDriverWait(self.title_browser, 5, 0.5).until(
                     ec.presence_of_element_located((By.XPATH, xpath))
                 )
-                xpath_res = self.browser.find_element_by_xpath(xpath)
                 news = xpath_res.find_elements_by_tag_name('a')
                 invalid_title = r'^(首页|下一页|上一页|确定|末页|尾页|更多(>>)?|\d+)$'
                 invalid_href = r'^(\.\/|\.\.\/)((\.\.\/)+)?$'
@@ -182,7 +179,7 @@ class Crawler():
         news = self.cursor.fetchall()
         return news
 
-    def text_func(self, new, html):
+    def text_func(self, new, text_html):
         text_sql = '''
         replace into texts (news_id, text) values (%s, %s)
         '''
@@ -193,7 +190,7 @@ class Crawler():
         text = None
         text_error = None
         try:
-            text = html.text.strip()
+            text = text_html.text.strip()
             # 保存正文内容
             self.cursor.execute(text_sql, (news_id, text))
             # 改变正文已抓取状态
@@ -206,7 +203,7 @@ class Crawler():
         return [text, text_error]
 
 
-    def attachment_func(self, new, html):
+    def attachment_func(self, new, attachment_html):
         news_update_attachment_sql = '''
         update news set attachment_state = %s where id = %s
         '''
@@ -219,20 +216,20 @@ class Crawler():
         try:
             # 保存新闻附件
             attachments = []
-            links = html.find_elements_by_tag_name('a')
+            links = attachment_html.find_elements_by_tag_name('a')
             for link in links:
                 href = link.get_attribute('href')
-                if re.match('.*\.(xls|xlsx|doc|docx|pdf)', str.lower(href)):
+                if href is not None and re.match('.*\.(xls|xlsx|doc|docx|pdf)', str.lower(href)):
                     attachments.append(base_util.attachment_format(link, url, href))
-            videos = html.find_elements_by_tag_name('video')
+            videos = attachment_html.find_elements_by_tag_name('video')
             for video in videos:
                 src = video.get_attribute('src')
-                if re.match('.*\.(webm|mp4|ogg)', str.lower(src)):
+                if src is not None and re.match('.*\.(webm|mp4|ogg)', str.lower(src)):
                     attachments.append(base_util.attachment_format(video, url, src))
-            images = html.find_elements_by_tag_name('img')
+            images = attachment_html.find_elements_by_tag_name('img')
             for img in images:
                 src = img.get_attribute('src')
-                if re.match('.*\.(jpg|jpeg|gif|png|bmp)', str.lower(src)):
+                if src is not None and re.match('.*\.(jpg|jpeg|gif|png|bmp)', str.lower(src)):
                     attachments.append(base_util.attachment_format(img, url, src))
             # 附件下载状态， 0-未下载，1-已下载或忽略下载
             attachment_state = '0'
@@ -294,12 +291,12 @@ class Crawler():
                 'text_error': None,
                 'attachments_error': None
             }
-            self.browser.get(url)
+            self.text_browser.get(url)
             # 显性等待，等待xpath的元素出现程序才往下运行
-            WebDriverWait(self.browser, 5, 0.5).until(
-                ec.presence_of_element_located((By.XPATH, xpath))
+            html = WebDriverWait(self.text_browser, 5, 0.5).until(
+                method=ec.presence_of_element_located((By.XPATH, xpath)),
+                message='元素未加载'
             )
-            html = self.browser.find_element_by_xpath(xpath)
             if text_state == '0':
                 text_thread = ResultThread(self.text_func, (new, html))
                 text_thread.start()
@@ -385,8 +382,10 @@ class Crawler():
             self.conn.close()
 
     def close_browser(self):
-        if self.browser is not None:
-            self.browser.close()
+        if self.title_browser is not None:
+            self.title_browser.close()
+        if self.text_browser is not None:
+            self.text_browser.close()
 
 class ResultThread(threading.Thread):
     def __init__(self, func, args=()):
@@ -431,7 +430,7 @@ def test():
     return jsonify(result)
 
 # 手动触发爬取程序
-@app.route("/crawler/crawler", methods=['GET'])
+@app.route("/crawler/crawl", methods=['GET'])
 def crawler():
     crawler_instance.crawler()
     return 'ok'
