@@ -1,8 +1,32 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import random, re, requests, os, time
+import hashlib
+import os
+import random
+import re
+import sys
+import time
+import traceback
 from urllib.parse import urlparse, urlunparse
+
+import requests
+
+
+class File:
+    path = None
+    name = None
+    fmt = None
+    size = None
+    md5 = None
+
+    def __init__(self, path=None, name=None, fmt=None, size=None, md5=None):
+        self.path = path
+        self.name = name
+        self.fmt = fmt
+        self.size = size
+        self.md5 = md5
+
 
 def url_format(url_absolute, url):
     """
@@ -63,10 +87,10 @@ def url_format(url_absolute, url):
                         url_levels_copy2 = url_levels[1:]
                 # 根据绝对路径剩余的层级数，添加相应的相对符号
                 url_abs_copy2 = [i for i in url_abs_copy if i not in ['', '.', '..']]
-                for i in range(len(url_abs_copy2)):
-                    if i == 0:
+                for j in range(len(url_abs_copy2)):
+                    if j == 0:
                         url_levels_copy2.insert(0, '.')
-                    elif i == 1:
+                    elif j == 1:
                         url_levels_copy2[0] = '..'
                     else:
                         url_levels_copy2.insert(0, '..')
@@ -104,7 +128,7 @@ def url_format(url_absolute, url):
 
 
 def random_str():
-    rand_str =  ''.join([str(random.choice(range(10))) for i in range(10)])
+    rand_str = ''.join([str(random.choice(range(10))) for i in range(10)])
     return rand_str
 
 
@@ -113,13 +137,14 @@ def url_linux(url):
     url = re.sub(r'/+', '/', url)
     return url
 
+
 def attachment_format(ele, sup_url, url):
-    '''
+    """
     :param ele: 附件所在的js节点
     :param sup_url: 附件所在的页面的url
     :param url: 附件的url
     :return:
-    '''
+    """
     # 附加的绝对路径
     file_url = url_format(sup_url, url)[2]
     # 附件格式
@@ -134,22 +159,21 @@ def attachment_format(ele, sup_url, url):
 
 
 def download_file(url, path, min_size, try_time=0):
-    '''
+    """
     下载文件
     :param url:
     :param path:
     :param min_size 文件最小尺寸
     :param try_time 尝试下载次数
-    :return: [是否下载成功, 是否文件太小]
-    '''
-    download_flag = False
-    too_small_flag = False
+    :return: [是否下载成功, 下载结果信息]
+    """
+    file = File()
     if try_time > 0:
         print('尝试下载次数:{}'.format(try_time))
     max_try_time = 5
     if try_time >= max_try_time:
         os.remove(path)
-        return [False, False]
+        return [False, False, '最多尝试下载{}次'.format(max_try_time), file]
     start_index = 0
     if os.path.exists(path):
         start_index = os.path.getsize(path)
@@ -159,26 +183,29 @@ def download_file(url, path, min_size, try_time=0):
     with requests.get(url, headers, stream=True) as response:
         http_size = int(response.headers['Content-Length'])
         # 如果是图片，并且大小小于min_size，则不下载
-        if re.match('.*\.(jpg|jpeg|gif|png|bmp)', str.lower(url)) and http_size < min_size:
-            too_small_flag = True
-            download_flag = True
+        if re.match(r'.*\.(jpg|jpeg|gif|png|bmp)', str.lower(url)) and http_size < min_size:
+            return [True, True, '文件是图片格式时size < {}，不下载'.format(min_size), file]
+        with open(path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+        local_size = os.path.getsize(path)
+        # 如果http返回的文件大小和下载下来的文件大小不一致，重新下载文件
+        if http_size != local_size:
+            try_time += 1
+            return download_file(url, path, min_size, try_time)
         else:
-            with open(path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        f.write(chunk)
-            local_size = os.path.getsize(path)
-            # 如果http返回的文件大小和下载下来的文件大小不一致，重新下载文件
-            if http_size != local_size:
-                try_time += 1
-                return download_file(url, path, min_size, try_time)
-            else:
-                download_flag = True
-    return [download_flag, too_small_flag]
+            with open(path, 'rb') as f:
+                encrypt_md5 = hashlib.md5()
+                by = f.read()
+                encrypt_md5.update(by)
+                file.md5 = encrypt_md5.hexdigest()
+            file.size = http_size
+            return [True,  False, '下载成功', file]
 
 
 def cur_time():
-    return time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
 
 
 def str_time(ti):
@@ -189,4 +216,13 @@ def str_time(ti):
     second = int(ti)
     ti -= second
     millisecond = int(ti * 1000)
-    return '{}小时 {}分钟 {}秒 {}毫秒'.format(hour,minute,second,millisecond)
+    return '{}小时 {}分钟 {}秒 {}毫秒'.format(hour, minute, second, millisecond)
+
+
+def str_exception():
+    """
+    将异常信息转为字符串
+    :return:
+    """
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    return str(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
