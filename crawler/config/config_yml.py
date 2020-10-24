@@ -4,7 +4,7 @@ import threading
 
 BASE_DIR = r'D:\application\workspace\qiyue-config'
 SEARCH_PATHS = r'config\qiyue'
-PROFILE = 'dev'
+PROFILE = 'prod'
 SOURCE = {
     'python': {
         'name': 'crawler',
