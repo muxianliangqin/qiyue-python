@@ -6,7 +6,7 @@ PROFILE = 'prod'
 BASE_DIR = r'/home/git/qiyue/config/'
 # PROFILE = 'dev'
 # BASE_DIR = r'D:\application\workspace\qiyue-config'
-SEARCH_PATHS = r'config\qiyue'
+SEARCH_PATHS = r'config/qiyue'
 SOURCE = {
     'python': {
         'name': 'crawler',
