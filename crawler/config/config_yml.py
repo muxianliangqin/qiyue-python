@@ -13,7 +13,7 @@ SOURCE = {
         'format': 'yml'
     },
     'java': {
-        'name': 'custom,kafka',
+        'name': 'common,kafka',
         'format': 'yml'
     }
 }
