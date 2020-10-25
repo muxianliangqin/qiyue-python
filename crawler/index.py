@@ -20,7 +20,7 @@ CONN = get_conn()
 FLASK_HOST = config_get('flask.host')
 FLASK_PORT = config_get('flask.port')
 KAFKA_BOOTSTRAP_SERVERS = config_get('spring.kafka.bootstrap-servers')
-KAFKA_TOPIC = config_get('kafka.topic')
+KAFKA_TOPIC = config_get('kafka.topic.crawler')
 
 
 def crawl_title(column_id):
