@@ -319,7 +319,7 @@ def crawl_attachment(article_result, attachment_html):
 
 
 def crawl_article(browser, article_result):
-    article_id, url, xpath, charset = article_result.article_id, article_result.url, article_result.xpath_article_title, \
+    article_id, url, xpath, charset = article_result.article_id, article_result.url, article_result.xpath, \
                                       article_result.charset
     print('时间：{}, 抓取正文和附件，url:{}, xpath:{}'.format(base_util.cur_time(), url, xpath))
     article_result.crawled_num = article_result.crawled_num + 1
