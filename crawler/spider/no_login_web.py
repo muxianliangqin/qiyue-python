@@ -295,7 +295,7 @@ def crawl_attachment(article_result, attachment_html):
         attachment_path = os.path.join(source_dir, file_path)
         attachment_path = base_util.url_linux(attachment_path)
         # 50k以下的图片，不下载
-        success, is_filter, message, file = base_util.download_file(file_url, attachment_path, 50 * 1024)
+        success, is_filter, message, file = base_util.download_file(file_url, attachment_path, 0)
         if is_filter:
             errors.append(message)
             print('获取附件成功：{}，但是根据规则过滤不下载:{}'.format(file_name, message))
