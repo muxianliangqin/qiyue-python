@@ -55,13 +55,14 @@ class ArticleResult:
     html = None
     attachment_list = None
     crawled_content = None
+    crawled_html = None
     crawled_attachment = None
     crawled_num = None
     error = None
     charset = None
 
     def __init__(self, column_id=None, article_id=None, url=None, title=None, xpath=None, text=None, html=None,
-                 attachment_list=None, error=None, crawled_content=0, crawled_attachment=0, crawled_num=0,
+                 attachment_list=None, error=None, crawled_content=0, crawled_html=0, crawled_attachment=0, crawled_num=0,
                  charset=None):
         self.column_id = column_id
         self.article_id = article_id
@@ -72,6 +73,7 @@ class ArticleResult:
         self.html = html
         self.attachment_list = attachment_list
         self.crawled_content = crawled_content
+        self.crawled_html = crawled_html
         self.crawled_attachment = crawled_attachment
         self.crawled_num = crawled_num
         self.error = error
@@ -310,7 +312,8 @@ def crawl_attachment(article_result, attachment_html):
             attachment_success = False
             errors.append(message)
     article_result.attachment_list = attachment_list
-    article_result.error = ','.join(errors)
+    if len(errors) != 0:
+        article_result.error = ','.join(errors)
     if attachment_success:
         article_result.crawled_attachment = 1
     else:
@@ -341,6 +344,7 @@ def crawl_article(browser, article_result):
             article_result.html = html
             article_result.text = text
             article_result.crawled_content = 1
+            article_result.crawled_html = 1
         if article_result.crawled_attachment == 0:
             crawl_attachment(article_result, browser_source)
     except Exception as e:

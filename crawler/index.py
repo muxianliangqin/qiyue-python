@@ -90,18 +90,19 @@ def crawl_text(article_id):
     '''
     try:
         article_select_by_id = '''
-        select a.article_id, a.url, a.crawled_content, a.crawled_attachment,
+        select a.article_id, a.url, a.crawled_content, a.crawled_html, a.crawled_attachment,
              a.crawled_num, c.charset, c.xpath_article_content 
             from article a 
             join `column` c on c.column_id = a.column_id
             where a.article_id = %s
         '''
         cursor.execute(article_select_by_id, (article_id,))
-        article_id, url, crawled_content, crawled_attachment, crawled_num, charset, xpath = cursor.fetchone()
+        article_id, url, crawled_content, crawled_html, crawled_attachment, crawled_num, charset, xpath_article_content = cursor.fetchone()
         if article_id is None:
             print('article_id:{} 的数据不存在'.format(article_id))
             return
-        article_result = ArticleResult(article_id=article_id, url=url, xpath=xpath, crawled_content=crawled_content,
+        article_result = ArticleResult(article_id=article_id, url=url, xpath=xpath_article_content,
+                                       crawled_content=crawled_content, crawled_html=crawled_html,
                                        crawled_attachment=crawled_attachment, crawled_num=crawled_num, charset=charset)
         article_result = crawl_article(browser, article_result)
         attachment_list = article_result.attachment_list
@@ -132,26 +133,31 @@ def crawl_text(article_id):
                         'fileId': file_id,
                         'name': name
                     })
-        print('正文附件，attachments: {}'.format(attachments))
-        article_update = '''
-        update article set 
-            text = %s,
-            html = %s,
-            attachments = %s,
-            crawled_content = %s,
-            crawled_attachment = %s,
-            crawled_num = %s
-            where article_id = %s
-        '''
+        if article_result.text is not None:
+            print('获取正文text成功')
+            update_article_text = '''update article set text = %s, crawled_content = %s where article_id = %s'''
+            cursor.execute(update_article_text, (article_result.text, article_result.crawled_content, article_id))
+        if article_result.html is not None:
+            print('获取正文html成功')
+            update_article_html = '''update article set html = %s, crawled_html = %s where article_id = %s'''
+            cursor.execute(update_article_html, (article_result.html, article_result.crawled_html, article_id))
         attachments_json = None
         if len(attachments) > 0:
             attachments_json = json.dumps(attachments, ensure_ascii=False)
-        text, html, attachments, crawled_content, crawled_attachment, crawled_num \
-            = article_result.text, article_result.html, attachments_json, article_result.crawled_content, \
-              article_result.crawled_attachment, article_result.crawled_num
-        cursor.execute(article_update, (text, html, attachments, crawled_content, crawled_attachment,
-                                        crawled_num, article_id))
-        cursor.execute(article_update_error, (article_result.error, article_id))
+        if attachments_json is not None or article_result.crawled_attachment == 1:
+            print('获取附件成功')
+            update_article_attachments = '''
+            update article set attachments = %s, crawled_attachment = %s 
+                where article_id = %s
+            '''
+            cursor.execute(update_article_attachments,
+                           (attachments_json, article_result.crawled_attachment, article_id))
+        print('更新抓取次数：{}'.format(article_result.crawled_num))
+        update_article_num = '''update article set crawled_num = %s where article_id = %s'''
+        cursor.execute(update_article_num, (article_result.crawled_num, article_id))
+        if article_result.error is not None:
+            print('抓取正文等失败')
+            cursor.execute(article_update_error, (article_result.error, article_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
