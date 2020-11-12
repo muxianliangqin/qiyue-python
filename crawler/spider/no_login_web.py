@@ -1,21 +1,21 @@
-import re
-import traceback
-import time
 import os
+import re
 import threading
-import json
+import time
+import traceback
 
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-from crawler.utils import base as base_util
 from crawler.config.config_yml import get as config_get
+from crawler.utils import base as base_util
 
 ATTACHMENT_CRAWLER_DIR = config_get('file.attachment.crawler.dir')
 INVALID_TITLE = config_get('crawler.column.invalid.title')
 INVALID_HREF = config_get('crawler.column.invalid.href')
+HTML_CLEAN_REGEXP = config_get('crawler.article.html.clean.regexp')
 
 
 class ColumnResult:
@@ -338,10 +338,13 @@ def crawl_article(browser, article_result):
             return article_result
         if article_result.crawled_content == 0:
             html = browser_source.get_attribute('innerHTML')
+            if html is not None:
+                # '(\s+style=".*")|(\s+class=".*")'
+                html = re.sub(HTML_CLEAN_REGEXP, '', html)
+            article_result.html = html
             text = browser_source.text
             if text is not None:
                 text = text.strip()
-            article_result.html = html
             article_result.text = text
             article_result.crawled_content = 1
             article_result.crawled_html = 1
