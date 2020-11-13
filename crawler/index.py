@@ -59,17 +59,19 @@ def crawl_title(column_id):
             article_id, url, title, column_id \
                 = next_id(), article_result.url, article_result.title, article_result.column_id
             cursor.execute(article_insert_sql, (article_id, url, title, column_id, url))
-        column_update_page = '''
-        update `column` set
-            begin_page = %s, 
-            crawled_page = %s
-        where column_id = %s
-        '''
         current_page, crawled_page = column_result.current_page, column_result.crawled_page
-        # 更新获取历史数据的结果信息
-        cursor.execute(column_update_page, (current_page, crawled_page, column_id))
-        # 更新错误信息
-        cursor.execute(column_update_error, (column_result.error, column_id))
+        if crawled_page == 1 or current_page > begin_page:
+            column_update_page = '''
+            update `column` set
+                begin_page = %s, 
+                crawled_page = %s
+            where column_id = %s
+            '''
+            # 更新获取历史数据的结果信息
+            cursor.execute(column_update_page, (current_page, crawled_page, column_id))
+        if column_result.error is not None:
+            # 更新错误信息
+            cursor.execute(column_update_error, (column_result.error, column_id))
         conn.commit()
         print('爬取网站栏目文章列表成功column_id:{}, url: {}, '.format(column_id, url))
     except Exception as e:
