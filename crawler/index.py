@@ -2,7 +2,6 @@
 import json
 import os
 import sys
-import traceback
 
 from flask import Flask
 from kafka import KafkaConsumer
@@ -24,6 +23,7 @@ KAFKA_TOPIC = config_get('kafka.topic.crawler')
 
 
 def crawl_title(column_id):
+    print('开始爬取网站栏目数据，column_id: {}'.format(column_id))
     browser = get_browser(BROWSER)
     conn = get_conn(CONN)
     cursor = conn.cursor()
@@ -75,12 +75,13 @@ def crawl_title(column_id):
         print('爬取网站栏目文章列表成功column_id:{}, url: {}, '.format(column_id, url))
     except Exception as e:
         conn.rollback()
-        print('爬取网站栏目标题失败column_id:{}, error: {}'.format(column_id, traceback.format_exc()))
+        print('爬取网站栏目标题失败column_id:{}, error: {}'.format(column_id, repr(e)))
         cursor.execute(column_update_error, (str_exception(), column_id))
         conn.commit()
 
 
 def crawl_text(article_id):
+    print('开始爬取网站文章内容及附件：article_id: {}'.format(article_id))
     browser = get_browser(BROWSER)
     conn = get_conn(CONN)
     cursor = conn.cursor()
@@ -91,31 +92,33 @@ def crawl_text(article_id):
     '''
     try:
         article_select_by_id = '''
-        select a.article_id, a.url, a.crawled_content, a.crawled_html, a.crawled_attachment,
+        select a.article_id, a.url, a.crawled_text, a.crawled_html, a.crawled_attachment, a.content_id,
              a.crawled_num, c.charset, c.xpath_article_content 
             from article a 
             join `column` c on c.column_id = a.column_id
             where a.article_id = %s
         '''
         cursor.execute(article_select_by_id, (article_id,))
-        article_id, url, crawled_content, crawled_html, crawled_attachment, crawled_num, charset, xpath_article_content = cursor.fetchone()
+        (article_id, url, crawled_text, crawled_html, crawled_attachment, content_id, crawled_num, charset,
+         xpath_article_content) = cursor.fetchone()
         if article_id is None:
             print('article_id:{} 的数据不存在'.format(article_id))
             return
         article_result = ArticleResult(article_id=article_id, url=url, xpath=xpath_article_content,
-                                       crawled_content=crawled_content, crawled_html=crawled_html,
+                                       crawled_text=crawled_text, crawled_html=crawled_html,
                                        crawled_attachment=crawled_attachment, crawled_num=crawled_num, charset=charset)
         article_result = crawl_article(browser, article_result)
+        # 保存附件
         attachment_list = article_result.attachment_list
-        attachments = []
-        file_select_by_md5 = '''
-        select file_id, path, name, format, size, md5 from `file` where md5 = %s
-        '''
-        file_insert = '''
-        insert into `file` (file_id, path, name, format, size, md5) 
-        values (%s, %s, %s, %s, %s, %s)
-        '''
-        if attachment_list is not None:
+        if attachment_list is not None and len(attachment_list) > 0:
+            attachments = []
+            file_select_by_md5 = '''
+            select file_id, path, name, format, size, md5 from `file` where md5 = %s
+            '''
+            file_insert = '''
+            insert into `file` (file_id, path, name, format, size, md5) 
+            values (%s, %s, %s, %s, %s, %s)
+            '''
             for attachment in attachment_list:
                 file_id, path, name, fmt, size, md5 = next_id(), attachment.path, attachment.name, \
                                                       attachment.fmt, attachment.size, attachment.md5
@@ -134,35 +137,45 @@ def crawl_text(article_id):
                         'fileId': file_id,
                         'name': name
                     })
-        if article_result.text is not None:
-            print('获取正文text成功')
-            update_article_text = '''update article set text = %s, crawled_content = %s where article_id = %s'''
-            cursor.execute(update_article_text, (article_result.text, article_result.crawled_content, article_id))
-        if article_result.html is not None:
-            print('获取正文html成功')
-            update_article_html = '''update article set html = %s, crawled_html = %s where article_id = %s'''
-            cursor.execute(update_article_html, (article_result.html, article_result.crawled_html, article_id))
-        attachments_json = None
-        if len(attachments) > 0:
             attachments_json = json.dumps(attachments, ensure_ascii=False)
-        if attachments_json is not None or article_result.crawled_attachment == 1:
             print('获取附件成功')
-            update_article_attachments = '''
-            update article set attachments = %s, crawled_attachment = %s 
-                where article_id = %s
-            '''
-            cursor.execute(update_article_attachments,
-                           (attachments_json, article_result.crawled_attachment, article_id))
+            article_update_attachments = '''update article set attachments = %s where article_id = %s'''
+            cursor.execute(article_update_attachments, (attachments_json, article_id))
+        article_update_crawled_attachment = '''update article set crawled_attachment = %s where article_id = %s'''
+        cursor.execute(article_update_crawled_attachment, (article_result.crawled_attachment, article_id))
+        # 保存文章内容
+        if article_result.text is not None or article_result.html is not None:
+            if content_id is None:
+                print('新增文章内容content记录')
+                content_id = next_id()
+                content_insert_sql = '''insert into content (content_id, text, html) values (%s, %s, %s)'''
+                article_update_content_id = '''update article set content_id = %s where article_id = %s'''
+                cursor.execute(content_insert_sql, (content_id, article_result.text, article_result.html))
+                cursor.execute(article_update_content_id, (content_id, article_id))
+            else:
+                print('更新文章内容content数据')
+                content_update_sql = '''update content set text = %s, html = %s where content_id = %s'''
+                cursor.execute(content_update_sql, (article_result.text, article_result.html, content_id))
+            if article_result.text is not None:
+                print('更新文章获取text标记')
+                article_update_crawled_text = '''update article set crawled_text = %s where article_id = %s'''
+                cursor.execute(article_update_crawled_text, (1, article_id))
+            if article_result.html is not None:
+                print('更新文章获取html标记')
+                article_update_crawled_html = '''update article set crawled_html = %s where article_id = %s'''
+                cursor.execute(article_update_crawled_html, (1, article_id))
+        # 更新爬取次数
         print('更新抓取次数：{}'.format(article_result.crawled_num))
         update_article_num = '''update article set crawled_num = %s where article_id = %s'''
         cursor.execute(update_article_num, (article_result.crawled_num, article_id))
+        # 保存异常信息
         if article_result.error is not None:
             print('抓取正文等失败')
             cursor.execute(article_update_error, (article_result.error, article_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print('爬取网站正文失败：{}'.format(traceback.format_exc()))
+        print('爬取网站正文失败：{}'.format(repr(e)))
         cursor.execute(article_update_error, (str_exception(), article_id))
         conn.commit()
 

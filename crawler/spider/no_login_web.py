@@ -54,7 +54,7 @@ class ArticleResult:
     text = None
     html = None
     attachment_list = None
-    crawled_content = None
+    crawled_text = None
     crawled_html = None
     crawled_attachment = None
     crawled_num = None
@@ -62,7 +62,7 @@ class ArticleResult:
     charset = None
 
     def __init__(self, column_id=None, article_id=None, url=None, title=None, xpath=None, text=None, html=None,
-                 attachment_list=None, error=None, crawled_content=0, crawled_html=0, crawled_attachment=0, crawled_num=0,
+                 attachment_list=None, error=None, crawled_text=0, crawled_html=0, crawled_attachment=0, crawled_num=0,
                  charset=None):
         self.column_id = column_id
         self.article_id = article_id
@@ -72,7 +72,7 @@ class ArticleResult:
         self.text = text
         self.html = html
         self.attachment_list = attachment_list
-        self.crawled_content = crawled_content
+        self.crawled_text = crawled_text
         self.crawled_html = crawled_html
         self.crawled_attachment = crawled_attachment
         self.crawled_num = crawled_num
@@ -336,7 +336,7 @@ def crawl_article(browser, article_result):
         if article_result.crawled_num > 5:
             article_result.error = '爬取网站正文次数已超过5次'
             return article_result
-        if article_result.crawled_content == 0:
+        if article_result.crawled_text == 0:
             html = browser_source.get_attribute('innerHTML')
             if html is not None:
                 # '(\s+style=".*")|(\s+class=".*")'
@@ -346,7 +346,7 @@ def crawl_article(browser, article_result):
             if text is not None:
                 text = text.strip()
             article_result.text = text
-            article_result.crawled_content = 1
+            article_result.crawled_text = 1
             article_result.crawled_html = 1
         if article_result.crawled_attachment == 0:
             crawl_attachment(article_result, browser_source)
